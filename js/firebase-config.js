@@ -13,10 +13,10 @@
  * ============================================================ */
 
 window.FIREBASE_CONFIG = {
-  apiKey:            "여기에_apiKey_붙여넣기",
-  authDomain:        "여기에_authDomain_붙여넣기",
-  projectId:         "여기에_projectId_붙여넣기",
-  storageBucket:     "여기에_storageBucket_붙여넣기",
-  messagingSenderId: "여기에_messagingSenderId_붙여넣기",
-  appId:             "여기에_appId_붙여넣기"
+  apiKey:            "AIzaSyDlfgClL5xtxITrQnQw7xFtf2WUkxyyPbo",
+  authDomain:        "diet-tracker-27324.firebaseapp.com",
+  projectId:         "diet-tracker-27324",
+  storageBucket:     "diet-tracker-27324.firebasestorage.app",
+  messagingSenderId: "1062270107663",
+  appId:             "1:1062270107663:web:8954b400977d4c8bd7a37a"
 };
