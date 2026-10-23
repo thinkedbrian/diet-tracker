@@ -1,0 +1,15 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 편집기
+.vscode/
+.idea/
+*.swp
+
+# 개인 백업 파일 (내보내기로 생긴 기록)
+diet-backup-*.json
+
+# 로그
+*.log

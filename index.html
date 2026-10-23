@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 다이어트 기록장</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>🥗 AI 다이어트 기록장</h1>
+  <div class="date-picker">
+    <button id="prevDay" class="icon-btn" title="어제">◀</button>
+    <input type="date" id="curDate">
+    <button id="nextDay" class="icon-btn" title="내일">▶</button>
+    <button id="todayBtn" class="ghost-btn">오늘</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="today">오늘 기록</button>
+  <button class="tab" data-tab="stats">통계</button>
+  <button class="tab" data-tab="recommend">추천</button>
+  <button class="tab" data-tab="library">운동 방법</button>
+  <button class="tab" data-tab="settings">내 정보</button>
+</nav>
+
+<main>
+
+<!-- ======================= 오늘 기록 ======================= -->
+<section id="today" class="panel active">
+
+  <div class="summary">
+    <div class="ring-wrap">
+      <canvas id="ring" width="180" height="180"></canvas>
+      <div class="ring-center">
+        <strong id="ringRemain">0</strong>
+        <span>kcal 남음</span>
+      </div>
+    </div>
+    <div class="summary-cards">
+      <div class="card stat"><span class="label">섭취</span><strong id="sumIntake">0</strong><span class="unit">kcal</span></div>
+      <div class="card stat"><span class="label">운동 소모</span><strong id="sumBurned">0</strong><span class="unit">kcal</span></div>
+      <div class="card stat"><span class="label">순 섭취</span><strong id="sumNet">0</strong><span class="unit">kcal</span></div>
+      <div class="card stat"><span class="label">목표</span><strong id="sumTarget">0</strong><span class="unit">kcal</span></div>
+    </div>
+  </div>
+
+  <div class="macro-bars">
+    <div class="macro"><span>탄수화물 <b id="mCarb">0</b>g</span><div class="bar"><i id="bCarb"></i></div></div>
+    <div class="macro"><span>단백질 <b id="mProtein">0</b>g</span><div class="bar"><i id="bProtein"></i></div></div>
+    <div class="macro"><span>지방 <b id="mFat">0</b>g</span><div class="bar"><i id="bFat"></i></div></div>
+  </div>
+
+  <div id="coach" class="coach"></div>
+
+  <!-- 체중 -->
+  <div class="card">
+    <h2>⚖️ 오늘 몸무게</h2>
+    <div class="row">
+      <input type="number" id="weightInput" step="0.1" placeholder="예: 68.4" inputmode="decimal">
+      <span class="suffix">kg</span>
+      <button id="saveWeight" class="primary-btn">저장</button>
+      <span id="weightDiff" class="diff"></span>
+    </div>
+  </div>
+
+  <!-- 식사 -->
+  <div class="card">
+    <h2>🍚 먹은 음식 기록</h2>
+    <p class="hint">먹은 그대로 문장으로 적으세요. 내장 AI가 음식과 양을 알아내 칼로리를 계산합니다.<br>
+      예) <code>쌀밥 한 공기, 김치찌개 1인분, 계란 2개</code> / <code>닭가슴살 200g 샐러드 1인분</code></p>
+    <div class="row">
+      <select id="mealType">
+        <option value="아침">아침</option>
+        <option value="점심">점심</option>
+        <option value="저녁">저녁</option>
+        <option value="간식">간식</option>
+      </select>
+    </div>
+    <textarea id="mealInput" rows="3" placeholder="예: 점심에 제육볶음 1인분이랑 쌀밥 한 공기, 콜라 한 캔"></textarea>
+    <div class="row">
+      <button id="analyzeMeal" class="primary-btn">🤖 AI 칼로리 분석</button>
+      <button id="clearMeal" class="ghost-btn">지우기</button>
+    </div>
+    <div id="mealPreview" class="preview"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 오늘의 식사 <span id="mealCount" class="badge">0</span></h2>
+    <div id="mealList" class="list"></div>
+  </div>
+
+  <!-- 운동 -->
+  <div class="card">
+    <h2>🏃 운동 기록</h2>
+    <p class="hint">운동 이름과 시간을 적으면 체중·운동강도(MET)로 소모 칼로리를 계산합니다.<br>
+      예) <code>달리기 30분, 스쿼트 4세트</code> / <code>자전거 1시간 반</code></p>
+    <textarea id="workoutInput" rows="2" placeholder="예: 빨리걷기 40분, 플랭크 3세트"></textarea>
+    <div class="row">
+      <button id="analyzeWorkout" class="primary-btn">🤖 소모 칼로리 분석</button>
+      <button id="clearWorkout" class="ghost-btn">지우기</button>
+    </div>
+    <div id="workoutPreview" class="preview"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 오늘의 운동 <span id="workoutCount" class="badge">0</span></h2>
+    <div id="workoutList" class="list"></div>
+  </div>
+
+</section>
+
+<!-- ======================= 통계 ======================= -->
+<section id="stats" class="panel">
+  <div class="card">
+    <h2>📉 몸무게 변화</h2>
+    <div class="row range-row">
+      <button class="range-btn active" data-range="7">최근 7일</button>
+      <button class="range-btn" data-range="30">30일</button>
+      <button class="range-btn" data-range="90">90일</button>
+    </div>
+    <canvas id="weightChart" width="700" height="260"></canvas>
+    <div id="weightSummary" class="summary-text"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔥 섭취 vs 소모</h2>
+    <canvas id="kcalChart" width="700" height="260"></canvas>
+    <div class="legend">
+      <span><i class="dot in"></i>섭취</span>
+      <span><i class="dot out"></i>운동 소모</span>
+      <span><i class="dot line"></i>목표 칼로리</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🗓️ 기록 전체</h2>
+    <div id="historyTable" class="table-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>💾 데이터 백업</h2>
+    <p class="hint">기록은 이 브라우저에만 저장됩니다. 기기를 바꾸거나 초기화하기 전에 파일로 내려받아 두세요.</p>
+    <div class="row">
+      <button id="exportBtn" class="primary-btn">JSON 내보내기</button>
+      <label class="ghost-btn file-label">JSON 가져오기<input type="file" id="importFile" accept=".json" hidden></label>
+      <button id="resetBtn" class="danger-btn">전체 삭제</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 추천 ======================= -->
+<section id="recommend" class="panel">
+  <div class="card">
+    <h2>🍽️ 식단 추천</h2>
+    <p class="hint">오늘 남은 칼로리에 맞춰 식단을 골라줍니다.</p>
+    <div class="row">
+      <label>이 끼니에 쓸 칼로리 <input type="number" id="mealTargetKcal" step="50" style="width:100px"> kcal</label>
+      <button id="refreshMeals" class="primary-btn">추천 받기</button>
+    </div>
+    <div id="mealRecs" class="rec-grid"></div>
+  </div>
+
+  <div class="card">
+    <h2>🍎 가벼운 간식 추천</h2>
+    <div id="snackRecs" class="chips"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔥 운동 추천</h2>
+    <p class="hint">목표 소모 칼로리를 채우는 데 걸리는 시간을 계산합니다.</p>
+    <div class="row">
+      <label>태울 칼로리 <input type="number" id="burnTargetKcal" step="50" value="300" style="width:100px"> kcal</label>
+      <select id="preferType">
+        <option value="">전체</option>
+        <option value="유산소">유산소</option>
+        <option value="근력">근력</option>
+        <option value="스포츠">스포츠</option>
+        <option value="생활">생활 활동</option>
+      </select>
+      <button id="refreshEx" class="primary-btn">계산</button>
+    </div>
+    <div id="exRecs" class="table-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>📅 주간 운동 루틴</h2>
+    <div class="row">
+      <select id="routineLevel">
+        <option value="beginner">입문 (주 3회)</option>
+        <option value="normal" selected>기본 (주 4회)</option>
+        <option value="hard">고강도 (주 5회)</option>
+      </select>
+      <button id="refreshRoutine" class="primary-btn">루틴 보기</button>
+    </div>
+    <div id="routineBox" class="rec-grid"></div>
+  </div>
+</section>
+
+<!-- ======================= 운동 방법 ======================= -->
+<section id="library" class="panel">
+  <div class="card">
+    <h2>📖 운동 방법 백과</h2>
+    <div class="row">
+      <input type="text" id="exSearch" placeholder="운동 이름 검색 (예: 스쿼트)">
+      <select id="exFilter">
+        <option value="">전체</option>
+        <option value="유산소">유산소</option>
+        <option value="근력">근력</option>
+        <option value="스포츠">스포츠</option>
+        <option value="생활">생활</option>
+      </select>
+    </div>
+    <p class="hint">체중 <b id="libWeight">-</b>kg 기준 30분 소모량을 함께 보여줍니다.</p>
+  </div>
+  <div id="exLibrary" class="lib-grid"></div>
+</section>
+
+<!-- ======================= 내 정보 ======================= -->
+<section id="settings" class="panel">
+  <div class="card">
+    <h2>👤 내 신체 정보</h2>
+    <p class="hint">기초대사량(BMR)과 하루 목표 칼로리를 계산하는 데 사용됩니다.</p>
+    <div class="form-grid">
+      <label>성별
+        <select id="pGender"><option value="male">남성</option><option value="female">여성</option></select>
+      </label>
+      <label>나이 <input type="number" id="pAge" min="10" max="100"></label>
+      <label>키(cm) <input type="number" id="pHeight" step="0.1"></label>
+      <label>현재 체중(kg) <input type="number" id="pWeight" step="0.1"></label>
+      <label>목표 체중(kg) <input type="number" id="pGoalWeight" step="0.1"></label>
+      <label>활동량 <select id="pActivity"></select></label>
+      <label>목표 <select id="pGoal"></select></label>
+    </div>
+    <button id="saveProfile" class="primary-btn">저장</button>
+  </div>
+
+  <div class="card">
+    <h2>🧮 계산 결과</h2>
+    <div class="calc-grid">
+      <div><span>BMI</span><strong id="cBmi">-</strong></div>
+      <div><span>기초대사량 (BMR)</span><strong id="cBmr">-</strong></div>
+      <div><span>활동대사량 (TDEE)</span><strong id="cTdee">-</strong></div>
+      <div><span>하루 목표 칼로리</span><strong id="cTarget">-</strong></div>
+      <div><span>목표 단백질</span><strong id="cProtein">-</strong></div>
+      <div><span>목표 지방</span><strong id="cFat">-</strong></div>
+      <div><span>목표 탄수화물</span><strong id="cCarb">-</strong></div>
+      <div><span>목표까지</span><strong id="cToGoal">-</strong></div>
+    </div>
+    <details class="formula">
+      <summary>어떤 공식을 쓰나요?</summary>
+      <ul>
+        <li><b>BMR (Mifflin-St Jeor)</b><br>남성: 10×체중 + 6.25×키 − 5×나이 + 5<br>여성: 10×체중 + 6.25×키 − 5×나이 − 161</li>
+        <li><b>TDEE</b> = BMR × 활동계수(1.2 ~ 1.9)</li>
+        <li><b>운동 소모 칼로리</b> = MET × 3.5 × 체중(kg) ÷ 200 × 운동시간(분)</li>
+        <li><b>체지방 1kg</b> ≈ 7,700kcal → 하루 −500kcal면 1주에 약 0.45kg 감량</li>
+      </ul>
+      <p class="warn-text">⚠️ 이 앱의 계산은 추정치입니다. 성장기 청소년이라면 하루 섭취를 BMR 아래로 내리지 말고, 급격한 감량 대신 운동량을 늘리는 쪽을 권합니다.</p>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>모든 기록은 브라우저(localStorage)에만 저장됩니다. 서버로 전송되지 않습니다.</p>
+</footer>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/food-db.js"></script>
+<script src="js/exercise-db.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
