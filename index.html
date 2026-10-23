@@ -10,6 +10,7 @@
 
 <header class="topbar">
   <h1>🥗 AI 다이어트 기록장</h1>
+  <div id="authBox" class="auth-box"></div>
   <div class="date-picker">
     <button id="prevDay" class="icon-btn" title="어제">◀</button>
     <input type="date" id="curDate">
@@ -265,14 +266,18 @@
 </main>
 
 <footer>
-  <p>모든 기록은 브라우저(localStorage)에만 저장됩니다. 서버로 전송되지 않습니다.</p>
+  <p id="privacyNote">로그인하지 않으면 기록은 이 브라우저에만 저장됩니다.
+     구글 로그인을 하면 내 계정에 저장돼 다른 기기에서도 이어서 쓸 수 있습니다.</p>
 </footer>
 
 <div id="toast" class="toast"></div>
 
+<script src="js/firebase-config.js"></script>
 <script src="js/food-db.js"></script>
 <script src="js/exercise-db.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
+<!-- 구글 로그인 / 클라우드 저장 (firebase-config.js 설정 전에는 아무 일도 하지 않습니다) -->
+<script type="module" src="js/cloud.js"></script>
 </body>
 </html>

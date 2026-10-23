@@ -5,13 +5,14 @@
 (() => {
 'use strict';
 
-const STORE_KEY = 'dietTracker.v1';
+const GUEST_KEY = 'dietTracker.v1';
 
 const DEFAULT_PROFILE = {
   gender:'male', age:17, height:172, weight:68, goalWeight:63,
   activity:'light', goal:'lose'
 };
 
+let currentUid = null;       // 로그인한 사용자 (없으면 게스트)
 let state = load();
 let curDate = todayStr();
 let pendingMeal = null;      // AI 분석 결과 (저장 전)
@@ -20,11 +21,23 @@ let statsRange = 7;
 
 /* ------------------------------------------------------------
  * 저장소
+ *   로그인 전   : localStorage 'dietTracker.v1'
+ *   로그인 후   : localStorage 'dietTracker.v1.<uid>' + Firestore
+ *   → 한 컴퓨터를 여러 사람이 써도 기록이 섞이지 않습니다.
  * ---------------------------------------------------------- */
-function load() {
+function storeKey(uid) {
+  const id = uid === undefined ? currentUid : uid;
+  return id ? `${GUEST_KEY}.${id}` : GUEST_KEY;
+}
+
+function emptyState() {
+  return { profile:{ ...DEFAULT_PROFILE }, days:{} };
+}
+
+function load(uid) {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { profile:{ ...DEFAULT_PROFILE }, days:{} };
+    const raw = localStorage.getItem(storeKey(uid));
+    if (!raw) return emptyState();
     const parsed = JSON.parse(raw);
     return {
       profile: { ...DEFAULT_PROFILE, ...(parsed.profile || {}) },
@@ -32,16 +45,58 @@ function load() {
     };
   } catch (e) {
     console.warn('저장된 데이터를 읽지 못했습니다.', e);
-    return { profile:{ ...DEFAULT_PROFILE }, days:{} };
+    return emptyState();
   }
 }
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    localStorage.setItem(storeKey(), JSON.stringify(state));
   } catch (e) {
     toast('저장 공간이 부족해 저장하지 못했습니다.');
   }
+  // 로그인 상태면 클라우드에도 반영 (cloud.js가 1.5초 모아서 전송)
+  if (currentUid && window.Cloud && window.Cloud.ready) window.Cloud.scheduleSave(state);
+}
+
+/**
+ * 같은 사람의 기록 두 벌을 합친다. (기기 A와 기기 B, 또는 로컬과 클라우드)
+ * 끼니·운동은 id로 중복을 제거해 둘 다 살리고,
+ * 몸무게와 프로필은 더 최근에 수정된 쪽(base)을 우선한다.
+ */
+function mergeStates(base, other) {
+  if (!other || !other.days) return base;
+  const out = {
+    profile: { ...DEFAULT_PROFILE, ...(other.profile || {}), ...(base.profile || {}) },
+    days: {}
+  };
+  const dates = new Set([...Object.keys(base.days || {}), ...Object.keys(other.days || {})]);
+  dates.forEach(d => {
+    const a = base.days[d]  || { weight:null, meals:[], workouts:[] };
+    const b = other.days[d] || { weight:null, meals:[], workouts:[] };
+    const byId = (x, y) => {
+      const seen = new Set(), list = [];
+      [...(x||[]), ...(y||[])].forEach(item => {
+        const key = item.id || JSON.stringify(item);
+        if (seen.has(key)) return;
+        seen.add(key); list.push(item);
+      });
+      return list;
+    };
+    out.days[d] = {
+      weight: a.weight != null ? a.weight : b.weight,
+      meals: byId(a.meals, b.meals),
+      workouts: byId(a.workouts, b.workouts)
+    };
+  });
+  return out;
+}
+
+function hasRecords(s) {
+  return s && s.days && Object.keys(s.days).some(d => {
+    const v = s.days[d];
+    return v && (v.weight || (v.meals && v.meals.length) || (v.workouts && v.workouts.length));
+  });
 }
 
 /* ------------------------------------------------------------
@@ -751,8 +806,122 @@ $('#saveProfile').addEventListener('click', () => {
 });
 
 /* ============================================================
+ *  구글 로그인 — cloud.js 와 주고받는 창구
+ * ========================================================== */
+
+let authStatus = 'loading';   // loading | disabled | ready | signed-in | signed-out | error
+let authUser = null;
+
+/** cloud.js가 로그인 상태를 알려줄 때 호출 */
+function setAuthState({ status, user, message }) {
+  if (status === 'ready') { if (authStatus === 'loading') authStatus = 'signed-out'; renderAuth(); return; }
+  authStatus = status;
+  if (status === 'signed-in') {
+    authUser = user;
+  } else if (status === 'signed-out') {
+    if (currentUid) {           // 로그아웃 → 게스트 저장소로 전환
+      currentUid = null;
+      state = load();
+      renderToday(); renderSettings();
+    }
+    authUser = null;
+  } else if (status === 'error') {
+    toast(message || '로그인 중 문제가 생겼습니다.');
+  }
+  renderAuth();
+}
+
+/**
+ * 로그인 직후 cloud.js가 서버 기록을 넘겨준다.
+ * remote 가 null 이면 그 계정의 첫 로그인.
+ */
+function applyCloudData(uid, remote) {
+  const wasGuest = !currentUid;
+  const guestData = wasGuest ? state : load(null);
+  currentUid = uid;
+
+  const cached = load(uid);                        // 이 기기에 남아 있던 같은 계정 기록
+  let next = mergeStates(cached, remote || {});
+
+  // 이 계정으로 처음 로그인했는데 로그인 전 기록이 남아 있으면 옮길지 묻는다.
+  // 한 번 묻고 나면 다시 묻지 않는다 (같은 컴퓨터를 여러 사람이 쓸 때 서로 섞이지 않게)
+  const asked = localStorage.getItem('dietTracker.migrateAsked');
+  if (!remote && !asked && !hasRecords(cached) && hasRecords(guestData)) {
+    if (confirm('로그인 전에 이 기기에 저장해 둔 기록이 있습니다.\n내 계정으로 옮길까요?\n\n(옮기지 않으면 로그아웃 상태에서만 보입니다)')) {
+      next = mergeStates(guestData, next);
+      localStorage.removeItem(GUEST_KEY);          // 옮겼으니 게스트 쪽은 비운다
+    }
+    localStorage.setItem('dietTracker.migrateAsked', '1');
+  }
+
+  state = next;
+  save();                                          // 합친 결과를 계정 저장소와 클라우드에 기록
+  renderToday(); renderSettings();
+  if (document.querySelector('#stats').classList.contains('active')) renderStats();
+}
+
+/** 동기화 상태 표시 */
+function setSyncState(kind, message) {
+  const el = $('#syncState');
+  if (!el) return;
+  const map = {
+    loading: ['기록 불러오는 중…', ''],
+    pending: ['저장 중…', ''],
+    saving:  ['저장 중…', ''],
+    saved:   ['☁️ 저장됨', 'ok'],
+    error:   ['⚠️ 동기화 실패', 'bad']
+  };
+  const [text, cls] = map[kind] || ['', ''];
+  el.textContent = text;
+  el.className = 'sync ' + cls;
+  el.title = message || '';
+  if (kind === 'error' && message) toast(message);
+}
+
+function renderAuth() {
+  const box = $('#authBox');
+  if (!box) return;
+
+  if (authStatus === 'disabled') {
+    box.innerHTML = `<span class="auth-note" title="js/firebase-config.js를 설정하면 구글 로그인이 켜집니다">로컬 모드</span>`;
+    return;
+  }
+  if (authStatus === 'loading') { box.innerHTML = `<span class="auth-note">연결 중…</span>`; return; }
+
+  if (authStatus === 'signed-in' && authUser) {
+    box.innerHTML = `
+      <span class="sync" id="syncState"></span>
+      ${authUser.photo ? `<img class="avatar" src="${esc(authUser.photo)}" alt="">` : ''}
+      <span class="auth-name" title="${esc(authUser.email || '')}">${esc(authUser.name)}</span>
+      <button id="signOutBtn" class="ghost-btn small">로그아웃</button>`;
+    $('#signOutBtn').addEventListener('click', async () => {
+      if (!confirm('로그아웃할까요? 기록은 클라우드에 저장돼 있어 다시 로그인하면 돌아옵니다.')) return;
+      await window.Cloud.signOut();
+      toast('로그아웃했습니다.');
+    });
+    return;
+  }
+
+  box.innerHTML = `<button id="signInBtn" class="google-btn">
+      <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Google로 로그인</button>`;
+  $('#signInBtn').addEventListener('click', () => {
+    if (!window.Cloud) return toast('아직 연결 중입니다. 잠시 후 다시 눌러 주세요.');
+    window.Cloud.signIn();
+  });
+}
+
+window.App = { setAuthState, applyCloudData, setSyncState };
+
+/* ============================================================
  *  시작
  * ========================================================== */
+renderAuth();
 renderToday();
 renderSettings();
 window.addEventListener('resize', () => { if ($('#stats').classList.contains('active')) renderStats(); });
